@@ -1,8 +1,10 @@
-##############################################
-# The MIT License (MIT)
+# The MIT License
+#
+# Copyright (c) 2007 Damon Kohler
+# Copyright (c) 2015 Jonathan Le Roux (Modifications for Create 2)
+# Copyright (c) 2015 Brandon Pomeroy
 # Copyright (c) 2017 Kevin Walchko
-# see LICENSE for full details
-##############################################
+#
 # This is the main code for interacting with the Create 2
 
 import struct  # there are 2 places that use this ... why?
@@ -73,7 +75,7 @@ class Create2(object):
         """
         This doesn't seem to work
         """
-        self.SCI.write(OPCODES.MODE)
+        self.SCI.write(OPCODES.OI_MODE)
         time.sleep(0.005)
         ans = self.SCI.read(1)
         if len(ans) == 1:
@@ -145,7 +147,7 @@ class Create2(object):
     # def seek_dock(self):
     #     self.SCI.write(OPCODES.SEEK_DOCK)
 
-    def power(self):
+    def power_down(self):
         """
         Puts the Create 2 into Passive mode. The OI can be in Safe, or
         Full mode to accept this command.
@@ -159,6 +161,48 @@ class Create2(object):
         # self.drive_straight(0)
         self.drive_direct(0,0)
         time.sleep(self.sleep_timer)  # wait just a little for the robot to stop
+
+    # def drive_rotate(self, velocity, direction):
+    #     """
+    #     Turn in place clockwise: -1 CW
+    #     Turn in place counterclockwise: 1 CCW
+    #     """
+    #     if direction in [DRIVE.TURN_CW, DRIVE.TURN_CCW]:
+    #         pass
+    #     else:
+    #         raise Exception('Create2::drive_rotate() invalid direction:', direction)
+    #
+    #     v = self.limit(velocity, -500, 500)
+    #     # print('drive_rotate: {} {}'.format(v, direction))
+    #     data = struct.unpack('4B', struct.pack('>2h', v, direction))
+    #     self.SCI.write(OPCODES.DRIVE, data)
+
+    # def drive_turn(self, velocity, radius):
+    #     """
+    #     The create will turn
+    #
+    #     velocity: [-500,500] speed in mm/s
+    #     radius: [-2000,2000] radius of the turn in mm
+    #     """
+    #     v = self.limit(velocity, -500, 500)
+    #     r = self.limit(radius, -2000, 2000)
+    #     # print('drive_turn: {} {}'.format(v, r))
+    #     data = struct.unpack('4B', struct.pack('>2h', v, r))
+    #     self.SCI.write(OPCODES.DRIVE, data)
+
+    def drive_straight(self, velocity):
+         """
+         Will make the Create2 drive straight at the given velocity
+    
+         Arguments:
+             velocity: Velocity of the Create2 in mm/s. Positive velocities are forward,
+                 negative velocities are reverse. Max speeds are still enforced by drive()
+    
+         """
+         v = self.limit(velocity, -500, 500)
+         # print('drive_straight: {}'.format(v))
+         data = struct.unpack('4B', struct.pack('>hH', v, DRIVE.STRAIGHT))  # write do this?
+         self.SCI.write(OPCODES.DRIVE, data)
 
     def limit(self, val, low, hi):
         val = val if val < hi else hi
@@ -183,6 +227,95 @@ class Create2(object):
         data = struct.unpack('4B', struct.pack('>2h', r_pwm, l_pwm))  # write do this?
         self.SCI.write(OPCODES.DRIVE_PWM, data)
 
+    def drive(self, avg_vel, radius): #added by Ebru Emir (30.06.2021)
+        """
+        Drive motors: [-500, 500] mm/sec
+        Radius: [-2000, 2000] mm 
+        Negative radius makes the robot turn toward the right while positive radius makes the robot turn toward the left.
+        """
+        avg_vel = self.limit(avg_vel, -500, 500)
+        radius = self.limit(radius, -2000, 2000)
+        data = struct.unpack('4B', struct.pack('>2h', avg_vel, radius))  # write do this?
+        self.SCI.write(OPCODES.DRIVE, data)
+    
+    def motors(self, motors = 0): #added by Ebru Emir (30.06.2021)
+        """
+        motors: [direction_mb, direction_sb, main_brush, vacuum, side_brush]
+        direction_sb: 0-default (counterclockwise) 1-opposite (clockwise)
+        direction_mb: 0-default (inward) 1-opposite (outward)
+        All motors will run at maximum speed when enabled. The main brush and side brush can be run in either direction. The vacuum only runs forward.
+        """
+        packed = struct.pack('B', motors)
+        print("Packed is: ")
+        print(packed)
+        data = struct.unpack('B', struct.pack('B', motors))  
+        print("Data is: ")
+        print(data)
+        self.SCI.write(OPCODES.MOTORS, data)
+
+    def pwm_motors(self, main_brush_pwm = 0, side_brush_pwm = 0, vacuum_pwm = 0): #added by Ebru Emir (30.06.2021)
+        """
+        motors: [direction_mb, direction_sb, main_brush, vacuum, side_brush]
+        main_brush_pwm: [-127,127]
+        side_brush_pwm: [-127,127]
+        vacuum_pwm: [0,127]
+        With each data byte, you specify the duty cycle for the low side driver (max 128). 
+        For ex: if you want to control a motor with 25% of battery voltage, choose a duty cycle of 128 * 25% = 32. 
+        The main brush and side brush can be run in either direction. The vacuum only runs forward. Positive speeds turn the motor in its default direction.
+        """
+        print("Packed is: ")
+        print(struct.pack('bbB', main_brush_pwm, side_brush_pwm, vacuum_pwm))
+        data = struct.unpack('bbB', struct.pack('bbB', main_brush_pwm, side_brush_pwm, vacuum_pwm))  
+        print("Unpacked is: ")
+        print(data)
+        self.SCI.write(OPCODES.MOTORS_PWM, data)
+
+    # def turn_angle(self, angle, speed=100):
+    #     """
+    #     Uses the encoders to turn an angle in degrees. This is a best effort,
+    #     the results will not be perfect due to wheel slip and encoder errors.
+    #
+    #     CCW is positive
+    #     CW is negative
+    #     """
+    #     turn_angle = 0.0
+    #
+    #     if angle > 0:
+    #         cmd = (speed, -speed)  # R, L
+    #     else:
+    #         cmd = (-speed, speed)
+    #         angle = -angle
+    #
+    #     while abs(turn_angle) < angle:
+    #         self.drive_direct(*cmd)
+    #         sensors = self.get_sensors()
+    #         turn_angle += sensors.angle  # roomba only tracks the delta angle
+    #
+    #     self.robot.drive_direct(0, 0)
+    #
+    # def drive_distance(self, distance, speed=100, stop=False):
+    #     """
+    #     Uses the encoders to drive straight forward or backwards. This is a best effort,
+    #     the results will not be perfect due to wheel slip and encoder errors.
+    #         distance: meters
+    #         speed: mm/sec, positive is forward, negative is backwards
+    #     """
+    #     mov = 0.0
+    #
+    #     if distance > 0:
+    #         cmd = (speed, speed)  # R, L
+    #     else:
+    #         cmd = (-speed, -speed)
+    #         distance = -distance
+    #
+    #     while abs(mov) < distance:
+    #         self.drive_direct(*cmd)
+    #         sensors = self.get_sensors()
+    #         mov += sensors.distance/1000  # roomba only tracks the delta distance
+    #
+    #     if stop:
+    #         self.drive_stop()
+
     # ------------------------ LED ----------------------------
 
     def led(self, led_bits=0, power_color=0, power_intensity=0):
@@ -195,6 +328,14 @@ class Create2(object):
         """
         data = (led_bits, power_color, power_intensity)
         self.SCI.write(OPCODES.LED, data)
+    
+    def buttons(self, buttons = 0): #added by Ebru Emir (30.06.2021)
+        """
+        buttons: [clock, schedule, day,hour, minute, dock, spot, clean]
+        0-release 1-push
+        """
+        data = struct.unpack('B', struct.pack('B', buttons))  
+        self.SCI.write(OPCODES.BUTTONS, data)
 
     def digit_led_ascii(self, display_string):
         """
@@ -246,6 +387,10 @@ class Create2(object):
         if not isinstance(notes, tuple):
             notes = tuple(notes)
 
+        # dur = 0.0
+        # for i in notes:
+        #     if i % 2 != 0:
+        #         dur += notes[i]/64
         dt = 0
         for i in range(len(notes)//2):
             dt += notes[2*i+1]
