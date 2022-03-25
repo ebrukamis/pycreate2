@@ -1,0 +1,21 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Library for iRobot Create2 (modified version)
+message: >-
+  If you use this dataset, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Ebru
+    family-names: Emir
+    email: ekamis@uwaterloo.ca
+    affiliation: University of Waterloo
+    orcid: 'https://orcid.org/0000-0003-2338-4177'
+repository: 'https://github.com/ebrukamis/pycreate2'
+keywords:
+  - iRobot
+  - Create 2
+  - Laban Efforts
+date-released: '2022-03-24'
